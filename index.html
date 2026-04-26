@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ポケモンクイズ</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f0f4ff;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      padding: 24px;
+    }
+
+    #score-bar {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+    }
+
+    #score-bar span { font-weight: 700; color: #1a1a2e; }
+
+    #card {
+      background: white;
+      border-radius: 24px;
+      padding: 32px 28px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.10);
+      text-align: center;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    #question-label {
+      font-size: 13px;
+      color: #999;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    #sprite-wrap {
+      width: 180px;
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #sprite {
+      width: 180px;
+      height: 180px;
+      image-rendering: pixelated;
+      filter: brightness(0);
+      transition: filter 0.4s ease;
+    }
+
+    #sprite.revealed { filter: brightness(1); }
+
+    #choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .choice-btn {
+      padding: 12px 8px;
+      border-radius: 14px;
+      border: 2px solid #e8eaf0;
+      background: white;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a2e;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .choice-btn:hover:not(:disabled) {
+      background: #f0f4ff;
+      border-color: #6c8fff;
+      transform: translateY(-1px);
+    }
+
+    .choice-btn:disabled { cursor: default; }
+
+    .choice-btn.correct {
+      background: #e6f9ee;
+      border-color: #2ecc71;
+      color: #1a8a4a;
+    }
+
+    .choice-btn.wrong {
+      background: #fdecea;
+      border-color: #e74c3c;
+      color: #c0392b;
+    }
+
+    #result {
+      font-size: 20px;
+      font-weight: 700;
+      min-height: 28px;
+    }
+
+    #result.correct { color: #2ecc71; }
+    #result.wrong { color: #e74c3c; }
+
+    #answer-name {
+      font-size: 16px;
+      color: #555;
+      min-height: 22px;
+    }
+
+    #types {
+      display: flex;
+      gap: 8px;
+      min-height: 26px;
+    }
+
+    .type-badge {
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+    }
+
+    #next-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      border: none;
+      background: #6c8fff;
+      color: white;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: none;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    #next-btn:hover { background: #4a6fff; transform: translateY(-1px); }
+    #next-btn:active { transform: scale(0.97); }
+
+    #loading {
+      font-size: 14px;
+      color: #aaa;
+      padding: 40px 0;
+    }
+
+    .type-fire     { background: #F08030; }
+    .type-water    { background: #6890F0; }
+    .type-grass    { background: #78C850; }
+    .type-electric { background: #F8D030; color: #333; }
+    .type-ice      { background: #98D8D8; color: #333; }
+    .type-fighting { background: #C03028; }
+    .type-poison   { background: #A040A0; }
+    .type-ground   { background: #E0C068; color: #333; }
+    .type-flying   { background: #A890F0; }
+    .type-psychic  { background: #F85888; }
+    .type-bug      { background: #A8B820; }
+    .type-rock     { background: #B8A038; }
+    .type-ghost    { background: #705898; }
+    .type-dragon   { background: #7038F8; }
+    .type-dark     { background: #705848; }
+    .type-steel    { background: #B8B8D0; color: #333; }
+    .type-fairy    { background: #EE99AC; }
+    .type-normal   { background: #A8A878; }
+    .type-stellar  { background: #40B5A5; }
+  </style>
+</head>
+<body>
+  <div id="score-bar">正解: <span id="correct-count">0</span> &nbsp;/&nbsp; <span id="total-count">0</span> 問</div>
+
+  <div id="card">
+    <div id="loading">読み込み中...</div>
+  </div>
+
+  <script>
+    const TOTAL = 1025;
+    let correctCount = 0;
+    let totalCount = 0;
+    let busy = false;
+
+    const card = document.getElementById('card');
+    const correctEl = document.getElementById('correct-count');
+    const totalEl = document.getElementById('total-count');
+
+    function typeJa(type) {
+      const map = {
+        normal:'ノーマル', fire:'ほのお', water:'みず', grass:'くさ',
+        electric:'でんき', ice:'こおり', fighting:'かくとう', poison:'どく',
+        ground:'じめん', flying:'ひこう', psychic:'エスパー', bug:'むし',
+        rock:'いわ', ghost:'ゴースト', dragon:'ドラゴン', dark:'あく',
+        steel:'はがね', fairy:'フェアリー', stellar:'ステラ'
+      };
+      return map[type] || type;
+    }
+
+    function randId(exclude = []) {
+      let id;
+      do { id = Math.floor(Math.random() * TOTAL) + 1; } while (exclude.includes(id));
+      return id;
+    }
+
+    async function fetchJaName(id) {
+      const res = await fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`);
+      const data = await res.json();
+      const entry = data.names.find(n => n.language.name === 'ja-Hrkt') || data.names.find(n => n.language.name === 'ja');
+      return entry ? entry.name : null;
+    }
+
+    async function loadQuestion() {
+      if (busy) return;
+      busy = true;
+
+      card.innerHTML = '<div id="loading">読み込み中...</div>';
+
+      const correctId = randId();
+      const wrongIds = [randId([correctId]), randId([correctId]), randId([correctId])];
+
+      const [pokeRes, jaName, ...wrongNames] = await Promise.all([
+        fetch(`https://pokeapi.co/api/v2/pokemon/${correctId}`).then(r => r.json()),
+        fetchJaName(correctId),
+        ...wrongIds.map(fetchJaName)
+      ]);
+
+      const imgUrl = pokeRes.sprites.other['official-artwork'].front_default || pokeRes.sprites.front_default;
+      const types = pokeRes.types.map(t => t.type.name);
+
+      const choices = shuffle([jaName, ...wrongNames.filter(Boolean)]);
+
+      card.innerHTML = `
+        <div id="question-label">このポケモンだあれ？</div>
+        <div id="sprite-wrap"><img id="sprite" src="${imgUrl}" alt="pokemon"></div>
+        <div id="choices"></div>
+        <div id="result"></div>
+        <div id="answer-name"></div>
+        <div id="types"></div>
+        <button id="next-btn">次のポケモン →</button>
+      `;
+
+      const sprite = document.getElementById('sprite');
+      const choicesEl = document.getElementById('choices');
+      const resultEl = document.getElementById('result');
+      const answerNameEl = document.getElementById('answer-name');
+      const typesEl = document.getElementById('types');
+      const nextBtn = document.getElementById('next-btn');
+
+      choices.forEach(name => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.textContent = name;
+        btn.addEventListener('click', () => onAnswer(name === jaName, jaName, types, sprite, resultEl, answerNameEl, typesEl, nextBtn));
+        choicesEl.appendChild(btn);
+      });
+
+      busy = false;
+    }
+
+    function onAnswer(isCorrect, jaName, types, sprite, resultEl, answerNameEl, typesEl, nextBtn) {
+      totalCount++;
+      if (isCorrect) correctCount++;
+      correctEl.textContent = correctCount;
+      totalEl.textContent = totalCount;
+
+      sprite.classList.add('revealed');
+
+      document.querySelectorAll('.choice-btn').forEach(btn => {
+        btn.disabled = true;
+        if (btn.textContent === jaName) btn.classList.add('correct');
+        else if (isCorrect === false && btn.classList.contains('selected')) btn.classList.add('wrong');
+      });
+
+      if (isCorrect) {
+        resultEl.textContent = '正解！';
+        resultEl.className = 'correct';
+      } else {
+        resultEl.textContent = '不正解...';
+        resultEl.className = 'wrong';
+        answerNameEl.textContent = `正解は「${jaName}」`;
+      }
+
+      typesEl.innerHTML = types.map(t => `<span class="type-badge type-${t}">${typeJa(t)}</span>`).join('');
+      nextBtn.style.display = 'block';
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    document.addEventListener('click', e => {
+      if (e.target.id === 'next-btn') loadQuestion();
+      if (e.target.classList.contains('choice-btn') && !e.target.disabled) {
+        e.target.classList.add('selected');
+      }
+    });
+
+    loadQuestion();
+  </script>
+</body>
+</html>
